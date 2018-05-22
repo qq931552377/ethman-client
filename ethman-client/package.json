@@ -8,5 +8,9 @@
   },
   "devDependencies": {
     "@types/node": "^6.0.87"
+  },
+  "dependencies": {
+    "net": "^1.0.2",
+    "my-node-notifier": "^0.0.0"
   }
 }
