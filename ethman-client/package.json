@@ -9,8 +9,14 @@
   "devDependencies": {
     "@types/node": "^6.0.87"
   },
+  "scripts": {
+    "start": "node app.js"
+  },
   "dependencies": {
+    "fs": "0.0.1-security",
+    "jsonfile": "^4.0.0",
     "net": "^1.0.2",
-    "my-node-notifier": "^0.0.0"
+    "node-cron": "^1.2.1",
+    "request": "^2.87.0"
   }
 }
