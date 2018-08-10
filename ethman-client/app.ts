@@ -135,7 +135,7 @@ class Rig extends events.EventEmitter {
     ip: string;
     port: number;
     tempLimit: number = 78;
-    private stat: Stat;
+    private _stat: Stat;
 
     private _temp: number;
     get temp(): number {
@@ -175,19 +175,15 @@ class Rig extends events.EventEmitter {
     }
 
     updateRigStatus(stat: Stat) {
-        console.log(this.name);
-        console.log(stat.hashRate);
-        console.log(stat.temps);
-
-        this.stat = stat;
+        this._stat = stat;
         this.temp = Math.max.apply(null, stat.temps);
     }
 
 
     toString() {
         console.log(this.name);
-        console.log(this.stat.hashRate);
-        console.log(this.stat.temps);
+        console.log(this._stat.hashRate);
+        console.log(this._stat.temps);
         let msg: string = this.name + ": " + this._temp + ";";
         return msg;
     }
@@ -292,12 +288,12 @@ function sendStat() {
 }
 
 const cron = require('node-cron');
-var checkRigTask = cron.schedule('*/1 * * * *', function () {
+var checkRigTask = cron.schedule('*/3 * * * *', function () {
     checkRigs();
 });
 checkRigTask.start();
 
-var sendStatTask = cron.schedule('0 21 * * *', function () {
+var sendStatTask = cron.schedule('0 16 * * *', function () {
     sendStat();
 });
 sendStatTask.start();
