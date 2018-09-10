@@ -179,6 +179,12 @@ class Rig extends events.EventEmitter {
         this.temp = Math.max.apply(null, stat.temps);
     }
 
+    hasStat(): boolean {
+        if (this._stat)
+            return true;
+        else
+            return false;
+    }
 
     toString() {
         console.log(this.name);
@@ -199,12 +205,14 @@ class Rig extends events.EventEmitter {
 class Stat {
     hashRate: string;
     temps: number[] = new Array();
+    fans: number[] = new Array();
     constructor(stat: string) {
         let json: any = JSON.parse(stat);
         this.hashRate = json.result[2].split(';')[0];
         let tempFan = json.result[6].split(';');
         for (var i = 0; i < tempFan.length; i += 2) {
             this.temps.push(tempFan[i]);
+            this.fans.push(tempFan[i + 1]);
         }
     }
 }
@@ -279,19 +287,26 @@ function checkRigs() {
     }
 }
 
-function sendStat() {
+const sendStat = async () => {
     let msg: string = "";
     for (let rig of rigs) {
-         msg += rig.toString() + "\n";
+        if (rig.hasStat())
+            msg += rig.toString() + "\n";
     }
     viberNotifier.sendMessage(msg, user1.viber);
 }
+
+sendStat().catch(err => {
+    console.log(err);
+    console.log("sendStat CATCH!");
+})
 
 const cron = require('node-cron');
 var checkRigTask = cron.schedule('*/3 * * * *', function () {
     checkRigs();
 });
 checkRigTask.start();
+checkRigs();
 
 var sendStatTask = cron.schedule('0 16 * * *', function () {
     sendStat();
