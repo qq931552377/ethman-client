@@ -83,7 +83,6 @@ class ViberNotifier extends Notifier {
             return;
         }
         message = message.replace("+", "%2B");
-        //let url: string = `http://sms.ru/sms/send?api_id=${this.token}&to=${this.phone}&text=${message}`;
         let url: string = "https://script.google.com/macros/s/AKfycbyKbHQbk_cHIeS7QIy4J1JupBnVdFtE_Faa2bi_m2k8ISzpNzvh/exec";
         let options: string = `?text=${message}&user=${user}&token=${this.token}&sender=${this.name}`;
         let req = url + options;
@@ -134,8 +133,81 @@ class Rig extends events.EventEmitter {
     name: string;
     ip: string;
     port: number;
+    gpus: Gpu[] = new Array();
+
+    private _isOnline: boolean = false;
+    get isOnline(): boolean {
+        return this._isOnline;
+    }
+    set isOnline(isOnline: boolean) {
+        if (isOnline == this._isOnline) {
+            return;
+        }
+
+        this._isOnline = isOnline;
+        this.emit('onlineStatusChanged')
+    }
+
+    updateStatusFromJson(stat: string) {
+        let json: any = JSON.parse(stat);
+        //this.hashRate = json.result[2].split(';')[0];
+        let tempFan = json.result[6].split(';');
+        //this.temp = -999;
+
+        for (var i = 0; i < this.gpus.length; i++) {
+            this.gpus[i].temp = tempFan[i * 2];
+            this.gpus[i].fan = tempFan[i * 2 + 1];
+        }
+    }
+
+    initGpu(count: number) {
+        for (var id = 0; id < count; id++) {
+            this.gpus.push(new Gpu(id));
+        }
+    }
+
+    toString() {
+        //console.log(this.name);
+        //console.log(this._stat.hashRate);
+        //console.log(this.temperature());
+        //let eventsMsg: string;
+        //eventsMsg +=
+        let msg: string = this.name + ": " + this.temperature() + ";";
+        return msg;
+    }
+
+    temperature(): number {
+        let maxTemperature: number = -999;
+        for (let gpu of this.gpus) {
+            maxTemperature = Math.max(maxTemperature, gpu.temp);
+        }
+
+        return maxTemperature;
+    }
+
+    constructor(name: string, ip: string, port: number) {
+        super();
+        this.name = name;
+        this.ip = ip;
+        this.port = port;
+    }
+}
+
+class Gpu extends events.EventEmitter{
     tempLimit: number = 78;
-    private _stat: Stat;
+
+    id: number;
+    hashRate: string;
+
+    private _fan: number;
+    get fan(): number {
+        return this._fan;
+    }
+    set fan(fan: number) {
+        this._fan = fan;
+
+        this.isFanFailure = ((this._fan <= 40) && (this._temp >= 60));
+    }
 
     private _temp: number;
     get temp(): number {
@@ -161,69 +233,32 @@ class Rig extends events.EventEmitter {
         this.emit('criticalTempStatusChanged')
     }
 
-    private _isOnline: boolean = true;
-    get isOnline(): boolean {
-        return this._isOnline;
+    private _isFanFailure: boolean = false;
+    get isFanFailure(): boolean {
+        return this._isFanFailure;
     }
-    set isOnline(isOnline: boolean) {
-        if (isOnline == this._isOnline) {
+    set isFanFailure(isFanFailure: boolean) {
+        if (isFanFailure == this._isFanFailure) {
             return;
         }
 
-        this._isOnline = isOnline;
-        this.emit('onlineStatusChanged')
+        this._isFanFailure = isFanFailure;
+        this.emit('fanFailureStatusChanged')
     }
 
-    updateRigStatus(stat: Stat) {
-        this._stat = stat;
-        this.temp = Math.max.apply(null, stat.temps);
-    }
-
-    hasStat(): boolean {
-        if (this._stat)
-            return true;
-        else
-            return false;
-    }
-
-    toString() {
-        console.log(this.name);
-        console.log(this._stat.hashRate);
-        console.log(this._stat.temps);
-        let msg: string = this.name + ": " + this._temp + ";";
-        return msg;
-    }
-
-    constructor(name: string, ip: string, port: number) {
+    constructor(id: number) {
         super();
-        this.name = name;
-        this.ip = ip;
-        this.port = port;
+        this.id = id;
     }
 }
 
-class Stat {
-    hashRate: string;
-    temps: number[] = new Array();
-    fans: number[] = new Array();
-    constructor(stat: string) {
-        let json: any = JSON.parse(stat);
-        this.hashRate = json.result[2].split(';')[0];
-        let tempFan = json.result[6].split(';');
-        for (var i = 0; i < tempFan.length; i += 2) {
-            this.temps.push(tempFan[i]);
-            this.fans.push(tempFan[i + 1]);
-        }
-    }
-}
+//function updateRigStatus(rig: Rig, stat: Stat) {
+//    console.log(rig.name);
+//    console.log(stat.hashRate);
+//    console.log(stat.temps);
 
-function updateRigStatus(rig: Rig, stat: Stat) {
-    console.log(rig.name);
-    console.log(stat.hashRate);
-    console.log(stat.temps);
-
-    rig.temp = Math.max.apply(null, stat.temps);
-}
+//    rig.temp = Math.max.apply(null, stat.temps);
+//}
 
 let smsNotifier: SmsNotifier = new SmsNotifier();
 smsNotifier.init("sms", "cd486eb0-6f4f-f044-4563-ba577c7da3dd");
@@ -241,6 +276,7 @@ user1.viber = "doedipEwGBmCivjBm6uwRg==";
 
 let rigs: Rig[] = readRigs('rigs.json');
 
+// Subscribe
 for (let rig of rigs) {
     rig.on('onlineStatusChanged', (err) => {
         let msg: string = rig.isOnline
@@ -253,16 +289,31 @@ for (let rig of rigs) {
         viberNotifier.sendMessage(msg, user1.viber);
     });
 
-    rig.on('criticalTempStatusChanged', (err) => {
-        let msg: string = rig.isCriticalTemp
-            ? `${rig.name}: critical temp ${rig.temp}C`
-            : `${rig.name}: normal temp ${rig.temp}C`;
+    for (let gpu of rig.gpus) {
+        gpu.on('criticalTempStatusChanged', (err) => {
+            let msg: string = gpu.isCriticalTemp
+                ? `${rig.name}.GPU${gpu.id}: critical temp ${gpu.temp}C`
+                : `${rig.name}.GPU${gpu.id}: normal temp ${gpu.temp}C`;
 
-        console.log(msg)
-        if (rig.name === "rig1" || rig.name === "rig2")
-            smsNotifier.sendMessage(msg, user1.sms);
-        viberNotifier.sendMessage(msg, user1.viber);
-    });
+            console.log(msg)
+            notifyUsers(rig, msg);
+        });
+
+        gpu.on('fanFailureStatusChanged', (err) => {
+            let msg: string = gpu.isCriticalTemp
+                ? `${rig.name}.GPU${gpu.id}: fan failure ${gpu.fan}%`
+                : `${rig.name}.GPU${gpu.id}: fan OK ${gpu.fan}}%`;
+
+            console.log(msg)
+            notifyUsers(rig, msg);
+        });
+    }
+}
+
+function notifyUsers(rig: Rig, msg: string) {
+    if (rig.name === "rig1" || rig.name === "rig2")
+        smsNotifier.sendMessage(msg, user1.sms);
+    viberNotifier.sendMessage(msg, user1.viber);
 }
 
 function checkRigs() {
@@ -272,8 +323,7 @@ function checkRigs() {
 
         s.on('data', function (d) {
             rig.isOnline = true;
-            let stat: Stat = new Stat(d);
-            rig.updateRigStatus(stat);
+            rig.updateStatusFromJson(d);
         });
 
         s.on('error', (err) => {
@@ -290,7 +340,7 @@ function checkRigs() {
 const sendStat = async () => {
     let msg: string = "";
     for (let rig of rigs) {
-        if (rig.hasStat())
+        if (rig.isOnline)
             msg += rig.toString() + "\n";
     }
     viberNotifier.sendMessage(msg, user1.viber);
